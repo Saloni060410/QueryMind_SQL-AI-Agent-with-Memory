@@ -62,3 +62,5 @@ Before importing and running the workflow, make sure you have:
 ## More Details
 
 Configuration notes, the MySQL/PostgreSQL setup commands, the local-vs-cloud model comparison, error handling, security notes, and troubleshooting are all covered in depth in the [build report](QueryMind_Report.pdf) — it's worth reading before you deploy this against a new database.
+
+##### For a step-by-step setup guide, email on salonisawant76@gmail.com.
