@@ -1,0 +1,255 @@
+{
+  "name": "sql_helper",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "\"Hello! Ask me anything about the database.\"",
+        "options": {
+          "allowedOrigins": "*",
+          "inputPlaceholder": "\"e.g. How many orders were placed today?\""
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "17c1174c-abdd-4171-86a6-65b677bb355b",
+      "name": "When chat message received",
+      "webhookId": "17d9a02a-46b5-49c0-82dd-4c8f0c87129f"
+    },
+    {
+      "parameters": {
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a MySQL assistant with one tool: run_sql.\nALWAYS call run_sql for every response. No exceptions.\n\nDATABASE: accident\nSCHEMA:\nTable: accident\n  - report_no     VARCHAR  (PRIMARY KEY)\n  - acc_date      DATE\n  - location      VARCHAR\n\nTable: car\n  - license       VARCHAR  (PRIMARY KEY)\n  - model         VARCHAR\n  - caryear       YEAR\n\nTable: owns\n  - driver_id     VARCHAR\n  - dri_name      VARCHAR\n  - license       VARCHAR  (FK → car.license)\n\nTable: participated\n  - driver_id     VARCHAR\n  - license       VARCHAR  (FK → car.license)\n  - report_no     VARCHAR  (FK → accident.report_no)\n  - damage_amount INT\n\nRELATIONSHIPS:\n- participated links accident + car + driver\n- owns links driver to their car via license\n- Use participated for damage amounts\n- Use owns for driver names\n- Join owns and participated on driver_id + license\n\nSTEPS (each as a separate tool call):\n1. run_sql(\"USE accident;\")\n2. run_sql(\"SELECT query based on schema above;\")\n\nRULES:\n1. Only SELECT queries. Never INSERT/UPDATE/DELETE/DROP.\n2. ONLY use column names from schema above. Never guess.\n3. Never return raw JSON or SQL to the user.\n4. Always summarise results in plain English.\n5. For lists return clean bullet points.\n6. Add LIMIT 1000 to all SELECT queries.\n7. Never show tool calls or query text to user.\n8. If 0 rows returned say so clearly.\n9.NEVER use LIMIT inside a subquery.LIMIT only appears at the end of the outermost query.",
+          "maxIterations": 10,
+          "returnIntermediateSteps": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "71f3f7e9-c343-412b-8733-fdd7191dd923",
+      "name": "AI Agent",
+      "retryOnFail": true,
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        800,
+        0
+      ],
+      "id": "4c7cb259-8c1e-48bb-a19a-9b3f6dcfcc0a",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "model": "llama3.1:8b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        80,
+        208
+      ],
+      "id": "7b3d4701-8e69-467c-ba43-1fbd392a0d50",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "dRcLjp0KMYL1C24W",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "The tool needs to be compulsory executed. It used to run the query returned by agent.",
+        "operation": "executeQuery",
+        "query": "{{ $fromAI('query', 'SQL statement to execute') }}",
+        "options": {
+          "connectionTimeoutMillis": 300000,
+          "connectionLimit": 10,
+          "detailedOutput": false
+        }
+      },
+      "type": "n8n-nodes-base.mySqlTool",
+      "typeVersion": 2.5,
+      "position": [
+        336,
+        208
+      ],
+      "id": "70fc7464-d882-402f-b717-ecb83747a0f6",
+      "name": "run sql",
+      "credentials": {
+        "mySql": {
+          "id": "uNKt7hOBJvtFOUIO",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableName": "chat_history",
+        "contextWindowLength": 1000
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        224,
+        208
+      ],
+      "id": "49ebccd8-be86-48df-aa31-626035dcad22",
+      "name": "Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "EK0cBvaO28M3UT8d",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "table": {
+          "__rl": true,
+          "value": "query_logs",
+          "mode": "list",
+          "cachedResultName": "query_logs"
+        },
+        "dataMode": "defineBelow",
+        "valuesToSend": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $execution.id }}"
+            },
+            {
+              "column": "question",
+              "value": "={{ $('When chat message received').item.json.chatInput }}"
+            },
+            {
+              "column": "answer",
+              "value": "={{ $json.output }}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{ $now }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        576,
+        -128
+      ],
+      "id": "4f4d7870-4739-48e3-a930-db245d7aaf9a",
+      "name": "sql_log",
+      "credentials": {
+        "mySql": {
+          "id": "SgcgCNUtK0wHyB0w",
+          "name": "log account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "sql_log",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "run sql": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sql_log": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "9MYM7LjW5t8slaxt",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": -1,
+    "availableInMCP": false
+  },
+  "versionId": "de813fd1-ca61-4496-ab71-ccbf27edbad9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e6ef09393b0594b25d32c49be7f86c2d204396e5fcb971c7a2d7ae5a315cde43"
+  },
+  "id": "ruoJw3ERQ66hAAyx",
+  "tags": []
+}
